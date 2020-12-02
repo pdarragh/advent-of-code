@@ -26,6 +26,33 @@ twoSum target numbers = twoSum' 0 Map.empty where
           Nothing        -> twoSum' (index + 1) (Map.insert (target - current) index pairMap)
           Just pairIndex -> Just (current, numbers !! pairIndex)
 
+-- Finds three integers in a list of integers that sum to a given integer.
+--
+-- Let us assume we have:
+--
+--     t = a + b + c
+--
+-- where `t` is the target integer and `a`, `b`, and `c` are numbers in the
+-- list.
+--
+-- This function works by iterating over the list of numbers and assuming each
+-- number fills the role of `a` in the above equation. It then calls `twoSum`
+-- with the quantity `t - a`, essentially asking `twoSum` to find two values `b`
+-- and `c` in the list of numbers that sum to `t - a`. If successful, `a`, `b`,
+-- and `c` form a triple of numbers that sum to `t`.
+threeSum :: Int -> [Int] -> Maybe (Int, Int, Int)
+threeSum target numbers = threeSum' incompletePairs where
+  -- The list of adjusted `twoSum` target values.
+  incompletePairs :: [(Int, Int)]  -- [(pairIndex, pairTarget)]
+  incompletePairs = zip [0..] (map (target -) numbers)
+  -- The real implementation.
+  threeSum' :: [(Int, Int)] -> Maybe (Int, Int, Int)
+  threeSum' [] = Nothing
+  threeSum' ((pairIndex, pairTarget):pairs) =
+    case twoSum pairTarget numbers of
+      Nothing     -> threeSum' pairs
+      Just (a, b) -> Just (a, b, numbers !! pairIndex)
+
 -- Converts a file whose contents are lines with integers on them into a list
 -- of integers.
 readIntsFromFile :: String -> IO [Int]
@@ -37,5 +64,8 @@ main :: IO ()
 main = do
   numbers <- readIntsFromFile sourceFile
   putStrLn (case twoSum targetSum numbers of
-    Nothing     -> "List did not contain numbers that sum to " ++ show targetSum ++ "."
-    Just (a, b) -> show targetSum ++ " = " ++ show a ++ " * " ++ show b ++ " = " ++ show (a * b))
+    Nothing     -> "List did not contain two numbers that sum to " ++ show targetSum ++ "."
+    Just (a, b) -> show targetSum ++ " = " ++ show a ++ " + " ++ show b ++ ". a * b = " ++ show (a * b))
+  putStrLn (case threeSum targetSum numbers of
+    Nothing        -> "List did not contain three numbers that sum to " ++ show targetSum ++ "."
+    Just (a, b, c) -> show targetSum ++ " = " ++ show a ++ " + " ++ show b ++ " + " ++ show c ++ ". a * b * c = " ++ show (a * b * c))
