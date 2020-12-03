@@ -10,24 +10,24 @@ type Password = String
 
 -- The specification of what is required of a given password.
 data Requirement = Requirement
-  { minCount  :: Int
-  , maxCount  :: Int
+  { numOne  :: Int
+  , numTwo  :: Int
   , character :: Char
   }
 
 instance Show Requirement where
   -- Renders a password requirement according to the rules of the input file.
-  show req = show (minCount req) ++ "-" ++ show (maxCount req) ++ " " ++ show (character req)
+  show req = show (numOne req) ++ "-" ++ show (numTwo req) ++ " " ++ show (character req)
 
 -- Defines a parser for reading a password requirement.
 readRequirement :: ReadP Requirement
-readRequirement = do lo <- munch1 isDigit
+readRequirement = do n1 <- munch1 isDigit
                      _  <- char '-'
-                     hi <- munch1 isDigit
+                     n2 <- munch1 isDigit
                      _  <- char ' '
                      c  <- get
-                     return Requirement { minCount = read lo
-                                        , maxCount = read hi
+                     return Requirement { numOne = read n1
+                                        , numTwo = read n2
                                         , character = c }
 
 instance Read Requirement where
@@ -54,14 +54,30 @@ instance Read ReqPassPair where
   -- Reads a password requirement and password from a string.
   readPrec = readP_to_Prec (const readReqPassPair)
 
--- Determines whether a password is valid according to a `Requirement`.
-passwordValid :: Requirement -> Password -> Bool
-passwordValid req = passwordValid' 0 where
+-- Determines whether a password is valid according to a `Requirement`, per the
+-- rules of Part 1. Here, `numOne` and `numTwo` of the requirement represent the
+-- bounds of a range of the quantity of allowable instances of the specified
+-- `character`.
+passwordValid1 :: Requirement -> Password -> Bool
+passwordValid1 req = passwordValid' 0 where
   passwordValid' :: Int -> Password -> Bool
-  passwordValid' count "" = (count >= minCount req) && (count <= maxCount req)
+  passwordValid' count "" = (count >= numOne req) && (count <= numTwo req)
   passwordValid' count (c:pass')
-    | c == character req = maxCount req /= 0 && passwordValid' (count + 1) pass'
+    | c == character req = numTwo req /= 0 && passwordValid' (count + 1) pass'
     | otherwise          = passwordValid' count pass'
+
+-- Determines whether a password is valid according to a `Requirement`, per the
+-- rules of Part 2. Here, `numOne` and `numTwo` of the requirement represent
+-- specific *1-indexed* positions in the password where the specified
+-- `character` must appear. The character must appear in one or the other, but
+-- not both or neither.
+passwordValid2 :: Requirement -> Password -> Bool
+passwordValid2 Requirement { numOne = d1, numTwo = d2, character = c } password
+  | d1 > length password || d2 > length password = False
+  | otherwise = case (password !! (d1 - 1) == c, password !! (d2 - 1) == c) of
+      (True,  True)  -> False
+      (False, False) -> False
+      (_,     _)     -> True
 
 -- Converts a file whose contents are lines of a specific format into a list of
 -- pairs of password requirements and passwords. The format is:
@@ -79,5 +95,7 @@ readInputFile fileName = do
 main :: IO ()
 main = do
   reqsAndPasses <- readInputFile sourceFile
-  let count = length (filter (uncurry passwordValid) reqsAndPasses)
-  putStrLn ("Number of valid passwords in input: " ++ show count)
+  let count1 = length (filter (uncurry passwordValid1) reqsAndPasses)
+      count2 = length (filter (uncurry passwordValid2) reqsAndPasses)
+  putStrLn ("Number of valid-1 passwords in input: " ++ show count1)
+  putStrLn ("Number of valid-2 passwords in input: " ++ show count2)
