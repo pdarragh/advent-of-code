@@ -61,7 +61,7 @@ passwordValid req = passwordValid' 0 where
   passwordValid' count "" = (count >= minCount req) && (count <= maxCount req)
   passwordValid' count (c:pass')
     | c == character req = maxCount req /= 0 && passwordValid' (count + 1) pass'
-    | otherwise     = passwordValid' (count + 1) pass'
+    | otherwise          = passwordValid' count pass'
 
 -- Converts a file whose contents are lines of a specific format into a list of
 -- pairs of password requirements and passwords. The format is:
@@ -79,4 +79,5 @@ readInputFile fileName = do
 main :: IO ()
 main = do
   reqsAndPasses <- readInputFile sourceFile
-  mapM_ (print . uncurry passwordValid) reqsAndPasses
+  let count = length (filter (uncurry passwordValid) reqsAndPasses)
+  putStrLn ("Number of valid passwords in input: " ++ show count)
