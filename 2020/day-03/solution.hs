@@ -58,21 +58,37 @@ access :: Board -> Int -> Int -> Cell
 access (Board rows) x y = row !! mod x (length row) where
   Row row = rows !! y
 
+paths :: [(Int, Int)]
+paths =
+  [ (1, 1)
+  , (3, 1)
+  , (5, 1)
+  , (7, 1)
+  , (1, 2)
+  ]
+
+defaultPath :: (Int, Int)
+defaultPath = paths !! 1
+
 -- Count the trees that the toboggan would hit starting at the top-left corner
--- and constantly moving right 3 and down 1 until the bottom of the board is
--- reached.
+-- and constantly moving right by `dx` and down by `dy` until the bottom of the
+-- board is reached.
 --
 -- NOTE: Although the rows are specified with finite length, they are actually
 --       assumed to repeat indefinitely, hence the modulo indexing.
-countTreesInDefaultPath :: Board -> Int
-countTreesInDefaultPath board@(Board rows) = countTrees 0 0 3 1 0 where
-  countTrees :: Int -> Int -> Int -> Int -> Int -> Int
-  countTrees x y dx dy trees
+countTrees :: Board -> (Int, Int) -> Int
+countTrees board@(Board rows) (dx, dy) = countTrees' 0 0 0 where
+  countTrees' :: Int -> Int -> Int -> Int
+  countTrees' trees x y
     | y >= length rows = trees
-    | otherwise = countTrees (x + dx) (y + dy) dx dy (trees + newTree) where
+    | otherwise = countTrees' (trees + newTree) (x + dx) (y + dy) where
         newTree = case access board x y of
           Open -> 0
           Tree -> 1
+
+-- Count the trees that would be hit by following the default path.
+countTreesInDefaultPath :: Board -> Int
+countTreesInDefaultPath board = countTrees board defaultPath
 
 -- Converts a file whose contents are a specification of a map into that map
 -- (which we call a `Board` here).
@@ -85,4 +101,13 @@ main :: IO ()
 main = do
   board <- readBoardFromFile sourceFile
   let trees = countTreesInDefaultPath board
-  putStrLn ("There are " ++ show trees ++ " trees in the 3/1 path beginning at the top left of the board.")
+  putStrLn "Default Path:"
+  putStrLn ("  There are " ++ show trees ++ " trees in the 3/1 path beginning at the top left of the board.")
+  let counts = map (countTrees board) paths
+  putStrLn "All Paths:"
+  mapM_ (putStrLn . (\((dx, dy), count) ->
+                       "  There are " ++ show count ++ " trees in the "
+                       ++ show dx ++ "/" ++ show dy
+                       ++ " path beginning at the top left of the board."))
+    (zip paths counts)
+  putStrLn ("The product of these counts is: " ++ show (product counts))
