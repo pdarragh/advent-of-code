@@ -1,4 +1,4 @@
-import Text.ParserCombinators.ReadP ((+++), ReadP, char, eof, manyTill, pfail)
+import Text.ParserCombinators.ReadP ((+++), ReadP, char, endBy, many, pfail)
 import Text.Read (readPrec, readP_to_Prec)
 
 sourceFile :: String
@@ -36,7 +36,7 @@ instance Show Row where
 -- Defines a parser for reading a row.
 readRow :: ReadP Row
 readRow = do
-  cells <- manyTill readCell eof
+  cells <- many readCell
   return (Row cells)
 
 instance Read Row where
@@ -50,14 +50,22 @@ instance Show Board where
   -- Renders a board the same way they are specified.
   show (Board rows) = unlines (map show rows)
 
--- NOTE: `Board` didn't get a `Read` instance because it wasn't working and I
---       decided to just move on with things. :shrug:
+-- Defines a parser for reading a board.
+readBoard :: ReadP Board
+readBoard = do
+  rows <- endBy readRow (char '\n')
+  return (Board rows)
+
+instance Read Board where
+  -- Reads a board from a string.
+  readPrec = readP_to_Prec (const readBoard)
 
 -- Access an (x, y) coordinate on the board, starting from the top-left corner.
 access :: Board -> Int -> Int -> Cell
 access (Board rows) x y = row !! mod x (length row) where
   Row row = rows !! y
 
+-- These are the paths defined in the instructions.
 paths :: [(Int, Int)]
 paths =
   [ (1, 1)
@@ -67,6 +75,7 @@ paths =
   , (1, 2)
   ]
 
+-- This is the default path, used in part 1.
 defaultPath :: (Int, Int)
 defaultPath = paths !! 1
 
@@ -95,7 +104,7 @@ countTreesInDefaultPath board = countTrees board defaultPath
 readBoardFromFile :: String -> IO Board
 readBoardFromFile fileName = do
   content <- readFile fileName
-  return (Board (map read (lines content)))
+  return (read content)
 
 main :: IO ()
 main = do
