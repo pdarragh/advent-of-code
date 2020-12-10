@@ -1,7 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 import Data.Functor (($>))
-import Data.Maybe (fromJust)
+import Data.List (sort)
 import Text.ParserCombinators.ReadP (ReadP, char, choice, count)
 import Text.Read (readPrec, readP_to_Prec)
 
@@ -84,6 +84,18 @@ seatID pass = (rowNum * 8) + colNum
 maxSeatID :: [BoardingPass] -> Int
 maxSeatID passes = foldr max (head ids) (tail ids) where ids = map seatID passes
 
+-- Given a set of mostly-consecutive numbers, find the one missing.
+findMissingSeatID :: [Int] -> Maybe Int
+findMissingSeatID seats = case missing of
+                            [n] -> Just n
+                            _   -> Nothing
+  where
+    missing = map ((+ 1) . fst) (filter (not . seatsAreAdjacent) adjacentSeatIDS)
+      where seatsAreAdjacent :: (Int, Int) -> Bool
+            seatsAreAdjacent (l, r) = r == (l + 1)
+            sortedSeats = sort seats
+            adjacentSeatIDS = zip (init sortedSeats) (tail sortedSeats)
+
 -- Converts a file into a list of boarding passes.
 readInputFile :: String -> IO [BoardingPass]
 readInputFile fileName = do
@@ -95,3 +107,6 @@ main = do
   passes <- readInputFile sourceFile
   let largestSeatID = maxSeatID passes
   putStrLn ("The largest seat ID is: " ++ show largestSeatID ++ ".")
+  case findMissingSeatID (map seatID passes) of
+    Nothing -> putStrLn "Could not find the missing seat ID."
+    Just seat -> putStrLn ("The missing seat ID is: " ++ show seat ++ ".")
