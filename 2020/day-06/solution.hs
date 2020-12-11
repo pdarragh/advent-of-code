@@ -1,4 +1,5 @@
 import Data.Char (isAscii, isLower)
+import Data.List (nub)
 import Text.ParserCombinators.ReadP
 import Text.Read (readPrec, readListPrec, readP_to_Prec)
 
@@ -35,6 +36,15 @@ instance Read GroupAnswers where
   readPrec = readP_to_Prec (const readGroupAnswers)
   readListPrec = readP_to_Prec (const readAllAnswers)
 
+-- Counts the number of questions to which anybody in the group answered "yes".
+countGroupAnswers :: GroupAnswers -> Int
+countGroupAnswers (GroupAnswers answers) = length (nub (concat answers))
+
+-- Sums the counts of "yes" answers across all groups.
+sumGroupAnswerCounts :: [GroupAnswers] -> Int
+sumGroupAnswerCounts = sum . map countGroupAnswers
+
+-- Converts a file into a list of groups' answers.
 readInputFile :: String -> IO [GroupAnswers]
 readInputFile fileName = do
   content <- readFile fileName
@@ -43,4 +53,5 @@ readInputFile fileName = do
 main :: IO ()
 main = do
   groupAnswers <- readInputFile sourceFile
-  print groupAnswers
+  let answerSum = sumGroupAnswerCounts groupAnswers
+  putStrLn ("The sum of the number of questions answered 'yes' by all groups is: " ++ show answerSum ++ ".")
