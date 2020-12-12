@@ -1,5 +1,5 @@
 import Data.Char (isAscii, isLower)
-import Data.List (nub)
+import Data.List (intersect, nub)
 import Text.ParserCombinators.ReadP
 import Text.Read (readPrec, readListPrec, readP_to_Prec)
 
@@ -37,12 +37,20 @@ instance Read GroupAnswers where
   readListPrec = readP_to_Prec (const readAllAnswers)
 
 -- Counts the number of questions to which anybody in the group answered "yes".
-countGroupAnswers :: GroupAnswers -> Int
-countGroupAnswers (GroupAnswers answers) = length (nub (concat answers))
+countAnyGroupAnswers :: GroupAnswers -> Int
+countAnyGroupAnswers (GroupAnswers answers) = length (nub (concat answers))
 
--- Sums the counts of "yes" answers across all groups.
-sumGroupAnswerCounts :: [GroupAnswers] -> Int
-sumGroupAnswerCounts = sum . map countGroupAnswers
+-- Sums the counts of "yes" answers by anyone in each group.
+sumAnyGroupAnswerCounts :: [GroupAnswers] -> Int
+sumAnyGroupAnswerCounts = sum . map countAnyGroupAnswers
+
+-- Counts the number of questions to which everyone in the group answered "yes".
+countEveryGroupAnswers :: GroupAnswers -> Int
+countEveryGroupAnswers (GroupAnswers answers) = length (foldr intersect (head answers) (tail answers))
+
+-- Sums the counts of "yes" answers by everyone in each group.
+sumEveryGroupAnswerCounts :: [GroupAnswers] -> Int
+sumEveryGroupAnswerCounts = sum . map countEveryGroupAnswers
 
 -- Converts a file into a list of groups' answers.
 readInputFile :: String -> IO [GroupAnswers]
@@ -53,5 +61,7 @@ readInputFile fileName = do
 main :: IO ()
 main = do
   groupAnswers <- readInputFile sourceFile
-  let answerSum = sumGroupAnswerCounts groupAnswers
-  putStrLn ("The sum of the number of questions answered 'yes' by all groups is: " ++ show answerSum ++ ".")
+  let anyAnswerSum = sumAnyGroupAnswerCounts groupAnswers
+  putStrLn ("The sum of the number of questions answered 'yes' by anyone in all groups is: " ++ show anyAnswerSum ++ ".")
+  let everyAnswerSum = sumEveryGroupAnswerCounts groupAnswers
+  putStrLn ("The sum of the number of questions answered 'yes' by everyone in all groups is: " ++ show everyAnswerSum ++ ".")
