@@ -21,8 +21,12 @@ sourceFile = "input.txt"
     Just x  -> return x
 
 (*->) :: s -> State s a -> a
-(*->) = flip evalState
+(*->) s0 m = fst (s0 **> m)
 infix 0 *->
+
+(**>) :: s -> State s a -> (a, s)
+(**>) = flip runState
+infix 0 **>
 
 type Color = String
 type ColorID = Int
