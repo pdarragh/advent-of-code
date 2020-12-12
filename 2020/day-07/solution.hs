@@ -22,6 +22,7 @@ sourceFile = "input.txt"
 
 (*->) :: s -> State s a -> a
 (*->) = flip evalState
+infix 0 *->
 
 type Color = String
 type ColorID = Int
@@ -33,10 +34,10 @@ data MapState = MapState { colorsToIDs :: ColorToIDMap
                          , nextID      :: ColorID }
                 deriving (Show)
 
-initialState :: MapState
-initialState = MapState { colorsToIDs = Map.empty
-                        , idsToColors = IntMap.empty
-                        , nextID      = 0 }
+initialMapState :: MapState
+initialMapState = MapState { colorsToIDs = Map.empty
+                           , idsToColors = IntMap.empty
+                           , nextID      = 0 }
 
 addColor' :: Color -> MapState -> MapState
 addColor' color MapState{..} = MapState { colorsToIDs = Map.insert color nextID colorsToIDs
@@ -54,6 +55,12 @@ colorToIDOrAdd color = lookupColor color <??> addColor color
 
 idToColor :: ColorID -> State MapState Color
 idToColor colorID = fromJust . IntMap.lookup colorID <$> gets idsToColors
+
+shinyGold :: Color
+shinyGold = "shiny gold"
+
+initialized :: MapState
+initialized = execState (addColor shinyGold) initialMapState
 
 data RawContainmentRule = RawContainmentRule Color [(Int, Color)] deriving (Eq, Show)
 
@@ -95,5 +102,5 @@ readInputFile fileName = do
 main :: IO ()
 main = do
   rawRules <- readInputFile sourceFile
-  let rules = initialState *-> mapM convertRule rawRules
+  let rules = initialized *-> mapM convertRule rawRules
   mapM_ print (zip [1..] rules)
