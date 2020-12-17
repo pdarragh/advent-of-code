@@ -8,6 +8,7 @@ import Text.ParserCombinators.ReadP (
   ReadP,
   char, choice, get, many1, manyTill, munch1, optional, satisfy, sepBy, skipSpaces, string)
 import Text.Read (readPrec, readP_to_Prec)
+import Data.Tuple (swap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
 import qualified Data.Map.Strict as Map
@@ -49,7 +50,7 @@ type ColorToIDMap = Map.Map Color ColorID
 type IDToColorMap = IntMap.IntMap Color
 type ColorIDMap = IntMap.IntMap
 type ColorIDSet = IntSet.IntSet
-type RuleMap = ColorIDMap ColorIDSet
+type RuleMap = ColorIDMap (ColorIDMap Int)
 
 -- A representation of the internal state, where colors are mapped to IDs.
 data ColorState = ColorState { colorsToIDs :: ColorToIDMap
@@ -135,11 +136,11 @@ colorIDsContainingColorID targetID rules = fixContainers (partitionOnEither simp
     simplifiedMap = IntMap.map simplifyRule rules
     -- Simplifies a rule, merely looking at whether the indicated color either
     -- can contain the target color or can't contain any colors at all.
-    simplifyRule :: ColorIDSet -> Either Bool ColorIDSet
+    simplifyRule :: ColorIDMap Int -> Either Bool ColorIDSet
     simplifyRule cids = if
-      | IntSet.null cids            -> Left False
-      | IntSet.member targetID cids -> Left True
-      | otherwise                   -> Right cids
+      | IntMap.null cids            -> Left False
+      | IntMap.member targetID cids -> Left True
+      | otherwise                   -> Right (IntMap.keysSet cids)
     -- Performs a fixed point reduction to identify which color IDs can contain
     -- the target color ID.
     fixContainers :: (ColorIDMap Bool, ColorIDMap ColorIDSet) -> [ColorID]
@@ -197,8 +198,8 @@ colorIDsContainingColorID targetID rules = fixContainers (partitionOnEither simp
 mapifyRules :: [ContainmentRule] -> RuleMap
 mapifyRules = IntMap.fromList . map flattenRule
   where
-    flattenRule :: ContainmentRule -> (ColorID, ColorIDSet)
-    flattenRule (ContainmentRule colorID rules) = (colorID, IntSet.fromList (map snd rules))
+    flattenRule :: ContainmentRule -> (ColorID, ColorIDMap Int)
+    flattenRule (ContainmentRule colorID rules) = (colorID, IntMap.fromList (map swap rules))
 
 -- Converts a raw rule (using strings as color names) to a containment rule
 -- (which uses IDs instead of strings) within our state.
