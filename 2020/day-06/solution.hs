@@ -3,9 +3,6 @@ import Data.List (intersect, nub)
 import Text.ParserCombinators.ReadP
 import Text.Read (readPrec, readListPrec, readP_to_Prec)
 
-sourceFile :: String
-sourceFile = "input.txt"
-
 -- An Answer indicates a "yes" to a particular question, indicated by a letter.
 newtype Answer = Answer Char deriving (Eq, Show)
 
@@ -57,6 +54,9 @@ readInputFile :: String -> IO [GroupAnswers]
 readInputFile fileName = do
   content <- readFile fileName
   return (read content)
+
+sourceFile :: String
+sourceFile = "input.txt"
 
 main :: IO ()
 main = do

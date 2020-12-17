@@ -5,9 +5,6 @@ import Data.List (sort)
 import Text.ParserCombinators.ReadP (ReadP, char, choice, count)
 import Text.Read (readPrec, readP_to_Prec)
 
-sourceFile :: String
-sourceFile = "input.txt"
-
 class (Show a, Eq a) => Partition a where
   -- An instance of Partition defines a pair of elements that give the halves of
   -- a partition.
@@ -101,6 +98,9 @@ readInputFile :: String -> IO [BoardingPass]
 readInputFile fileName = do
   content <- readFile fileName
   return (map read (lines content))
+
+sourceFile :: String
+sourceFile = "input.txt"
 
 main :: IO ()
 main = do

@@ -1,11 +1,5 @@
 import qualified Data.Map.Strict as Map
 
-sourceFile :: String
-sourceFile = "input.txt"
-
-targetSum :: Int
-targetSum = 2020
-
 -- Finds two integers in a list of integers that sum to a given integer.
 --
 -- When a new number is processed (i.e., in each call to twoSum'), its desired
@@ -59,6 +53,12 @@ readIntsFromFile :: String -> IO [Int]
 readIntsFromFile fileName = do
   content <- readFile fileName
   return (map read (lines content))
+
+sourceFile :: String
+sourceFile = "input.txt"
+
+targetSum :: Int
+targetSum = 2020
 
 main :: IO ()
 main = do

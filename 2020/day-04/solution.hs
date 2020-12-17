@@ -9,9 +9,6 @@ import Text.ParserCombinators.ReadP
   )
 import Text.Read (readPrec, readP_to_Prec)
 
-sourceFile :: String
-sourceFile = "input.txt"
-
 -- Like `ReadP.get` but gathers n characters into a string.
 getN :: Int -> ReadP String
 getN n = replicateM n get
@@ -204,6 +201,9 @@ readInputFile fileName = do
   content <- readFile fileName
   let Passports passports = read content in
     return passports
+
+sourceFile :: String
+sourceFile = "input.txt"
 
 main :: IO ()
 main = do

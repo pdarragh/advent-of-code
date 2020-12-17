@@ -2,9 +2,6 @@ import Data.Char (isDigit)
 import Text.ParserCombinators.ReadP (ReadP, char, eof, get, manyTill, munch1)
 import Text.Read (readPrec, readP_to_Prec)
 
-sourceFile :: String
-sourceFile = "input.txt"
-
 -- A semantic type alias.
 type Password = String
 
@@ -91,6 +88,9 @@ readInputFile :: String -> IO [(Requirement, Password)]
 readInputFile fileName = do
   content <- readFile fileName
   return (map (unpair . read) (lines content))
+
+sourceFile :: String
+sourceFile = "input.txt"
 
 main :: IO ()
 main = do

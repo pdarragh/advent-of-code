@@ -1,9 +1,6 @@
 import Text.ParserCombinators.ReadP ((+++), ReadP, char, endBy, many, pfail)
 import Text.Read (readPrec, readP_to_Prec)
 
-sourceFile :: String
-sourceFile = "input.txt"
-
 -- A description of squares that either have a tree... or don't.
 data Cell = Open
           | Tree
@@ -105,6 +102,9 @@ readBoardFromFile :: String -> IO Board
 readBoardFromFile fileName = do
   content <- readFile fileName
   return (read content)
+
+sourceFile :: String
+sourceFile = "input.txt"
 
 main :: IO ()
 main = do
