@@ -1,18 +1,19 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, MultiWayIf #-}
 
 import Control.Monad.State hiding (get)
 import Data.Char (isDigit)
+import Data.Functor ((<&>))
 import Data.Maybe (fromJust)
 import Text.ParserCombinators.ReadP (
   ReadP,
   char, choice, get, many1, manyTill, munch1, optional, satisfy, sepBy, skipSpaces, string)
 import Text.Read (readPrec, readP_to_Prec)
 import qualified Data.IntMap.Strict as IntMap
+import qualified Data.IntSet as IntSet
 import qualified Data.Map.Strict as Map
 
-sourceFile :: String
-sourceFile = "input.txt"
-
+-- Performs a Maybe action within a monadic context. If the left-hand action
+-- succeeds, its result is returned. Otherwise, the right-hand side is run.
 (<??>) :: Monad m => m (Maybe a) -> m a -> m a
 (<??>) mmx dx = do
   mx <- mmx
@@ -20,54 +21,85 @@ sourceFile = "input.txt"
     Nothing -> dx
     Just x  -> return x
 
+-- Given an initial state and a stateful action, runs that action and returns
+-- its result, discarding the state resulting from the action's execution.
 (*->) :: s -> State s a -> a
 (*->) s0 m = fst (s0 **> m)
 infix 0 *->
 
+-- Given an initial state and a stateful action, runs that action and returns
+-- the action's result paired with the state after the action's execution.
 (**>) :: s -> State s a -> (a, s)
 (**>) = flip runState
 infix 0 **>
 
+-- Given a map containing Eithers, produces a pair of maps containing just the
+-- Left and Right elements, respectively.
+partitionOnEither :: IntMap.IntMap (Either a b) -> (IntMap.IntMap a, IntMap.IntMap b)
+partitionOnEither = IntMap.foldrWithKey partitionOnEither' (IntMap.empty, IntMap.empty)
+  where
+    partitionOnEither' :: IntMap.Key -> Either a b -> (IntMap.IntMap a, IntMap.IntMap b) -> (IntMap.IntMap a, IntMap.IntMap b)
+    partitionOnEither' k (Left  v) (am, bm) = (IntMap.insert k v am, bm)
+    partitionOnEither' k (Right v) (am, bm) = (am, IntMap.insert k v bm)
+
+-- These are semantics type aliases for convenience.
 type Color = String
 type ColorID = Int
 type ColorToIDMap = Map.Map Color ColorID
 type IDToColorMap = IntMap.IntMap Color
+type ColorIDMap = IntMap.IntMap
+type ColorIDSet = IntSet.IntSet
+type RuleMap = ColorIDMap ColorIDSet
 
-data MapState = MapState { colorsToIDs :: ColorToIDMap
-                         , idsToColors :: IDToColorMap
-                         , nextID      :: ColorID }
+-- A representation of the internal state, where colors are mapped to IDs.
+data ColorState = ColorState { colorsToIDs :: ColorToIDMap
+                             , idsToColors :: IDToColorMap
+                             , nextID      :: ColorID }
                 deriving (Show)
 
-initialMapState :: MapState
-initialMapState = MapState { colorsToIDs = Map.empty
-                           , idsToColors = IntMap.empty
-                           , nextID      = 0 }
+-- The initial state, consisting of empty maps and the initial color ID.
+initialColorState :: ColorState
+initialColorState = ColorState { colorsToIDs = Map.empty
+                               , idsToColors = IntMap.empty
+                               , nextID      = 0 }
 
-addColor' :: Color -> MapState -> MapState
-addColor' color MapState{..} = MapState { colorsToIDs = Map.insert color nextID colorsToIDs
-                                        , idsToColors = IntMap.insert nextID color idsToColors
-                                        , nextID      = nextID + 1 }
+-- Adds a color to the state.
+addColor' :: Color -> ColorState -> ColorState
+addColor' color ColorState{..} = ColorState { colorsToIDs = Map.insert color nextID colorsToIDs
+                                            , idsToColors = IntMap.insert nextID color idsToColors
+                                            , nextID      = nextID + 1 }
 
-addColor :: Color -> State MapState Int
+-- Adds a color to the state, returning the new ID.
+addColor :: Color -> State ColorState Int
 addColor color = gets nextID <* modify (addColor' color)
 
-lookupColor :: Color -> State MapState (Maybe ColorID)
+-- Attempts to look up a color's ID in the state.
+lookupColor :: Color -> State ColorState (Maybe ColorID)
 lookupColor color = Map.lookup color <$> gets colorsToIDs
 
-colorToIDOrAdd :: Color -> State MapState Int
+-- Converts a color's name to its ID, producing an error if the color is not
+-- registered in the state.
+colorToID :: Color -> State ColorState Int
+colorToID color = fromJust <$> lookupColor color
+
+-- Converts a color's name to its ID, registering the color in the state if it
+-- has not been added before.
+colorToIDOrAdd :: Color -> State ColorState Int
 colorToIDOrAdd color = lookupColor color <??> addColor color
 
-idToColor :: ColorID -> State MapState Color
+-- Converts a color's ID to its name.
+idToColor :: ColorID -> State ColorState Color
 idToColor colorID = fromJust . IntMap.lookup colorID <$> gets idsToColors
 
-shinyGold :: Color
-shinyGold = "shiny gold"
+-- An initial state from which to work.
+initialized :: ColorState
+initialized = execState (addColor targetColor) initialColorState
 
-initialized :: MapState
-initialized = execState (addColor shinyGold) initialMapState
-
+-- Correlates a color to a list of colors that it can contain and the
+-- containable quantity of each.
 data RawContainmentRule = RawContainmentRule Color [(Int, Color)] deriving (Eq, Show)
 
+-- Constructs a parser for raw containment rules.
 readRawContainmentRule :: ReadP RawContainmentRule
 readRawContainmentRule = do
   color <- many1 get
@@ -82,29 +114,125 @@ readRawContainmentRule = do
     readBag = do
       n <- munch1 isDigit
       _ <- skipSpaces
-      c <- manyTill (satisfy (\c -> c /= ',' && c /= '.')) (string "bag")
-      _ <- optional (char 's')
+      c <- manyTill (satisfy (\c -> c /= ',' && c /= '.')) (skipSpaces >> string "bag" >> optional (char 's'))
       return (read n, c)
 
 instance Read RawContainmentRule where
   readPrec = readP_to_Prec (const readRawContainmentRule)
 
-data ContainmentRule = ContainmentRule ColorID [(Int, ColorID)] deriving (Show)
+-- Correlates a color's ID to a list of colors that it can contain and the
+-- containable quantity of each.
+data ContainmentRule = ContainmentRule ColorID [(Int, ColorID)] deriving (Eq, Ord, Show)
 
-convertRule :: RawContainmentRule -> State MapState ContainmentRule
+-- Produces a list of color IDs that can contain the indicated color, based on
+-- the rules provided in a given RuleMap.
+colorIDsContainingColorID :: ColorID -> RuleMap -> [ColorID]
+colorIDsContainingColorID targetID rules = fixContainers (partitionOnEither simplifiedMap)
+  where
+    -- We start by simplifying the initial rules. This gives us a better initial
+    -- state than we would otherwise have.
+    simplifiedMap :: ColorIDMap (Either Bool ColorIDSet)
+    simplifiedMap = IntMap.map simplifyRule rules
+    -- Simplifies a rule, merely looking at whether the indicated color either
+    -- can contain the target color or can't contain any colors at all.
+    simplifyRule :: ColorIDSet -> Either Bool ColorIDSet
+    simplifyRule cids = if
+      | IntSet.null cids            -> Left False
+      | IntSet.member targetID cids -> Left True
+      | otherwise                   -> Right cids
+    -- Performs a fixed point reduction to identify which color IDs can contain
+    -- the target color ID.
+    fixContainers :: (ColorIDMap Bool, ColorIDMap ColorIDSet) -> [ColorID]
+    fixContainers (resolvedContainers, unresolvedContainers)
+      | IntMap.null unresolvedContainers
+        -- There are no containers left to reduce, so our Bools contain the
+        -- answers!
+          = map fst (IntMap.toList (IntMap.filter id resolvedContainers))
+      | resolvedContainers == newResolvedContainers &&
+        unresolvedContainers == newUnresolvedContainers
+        -- One of the maps is identical to the previous iteration's. This means
+        -- we will no longer make progress, but that we also have not finished
+        -- reducing everything. (This is bad.)
+          = error "fixed-point reached without making sufficient progress"
+      | otherwise
+        -- There remain some containers to reduce. We reduce what we can and
+        -- merge the result into what we already have.
+          = fixContainers (newResolvedContainers, newUnresolvedContainers)
+      where
+        -- We merge the previously resolved containers with the containers that
+        -- we have just resolved, favoring the mappings of the latter (to
+        -- preserve progress).
+        newResolvedContainers :: ColorIDMap Bool
+        newResolvedContainers = IntMap.union (fst reducedContainerMaps) resolvedContainers
+        -- The now-remaining unresolved containers are whatever is left.
+        newUnresolvedContainers :: ColorIDMap ColorIDSet
+        newUnresolvedContainers = snd reducedContainerMaps
+        -- Reduces each of the yet-unresolved container IDs, then partitions the
+        -- result.
+        reducedContainerMaps :: (ColorIDMap Bool, ColorIDMap ColorIDSet)
+        reducedContainerMaps = partitionOnEither (IntMap.map reduceRule unresolvedContainers)
+        -- Folds a reduction over the set of IDs yet to be resolved. If the
+        -- first element of the tuple comes back as True, we've found at least
+        -- one sub-container that can contain the target ID, which means that
+        -- the current container can also contain the target ID. Otherwise, we
+        -- have a (hopefully smaller) set of sub-container IDs to check next
+        -- time, once progress has been made elsewhere.
+        reduceRule :: ColorIDSet -> Either Bool ColorIDSet
+        reduceRule cids = case IntSet.foldr singleStepReduce (False, IntSet.empty) cids of
+            (True, _)     -> Left True
+            (_,    cids') -> if
+              | IntSet.null cids' -> Left False
+              | otherwise         -> Right cids'
+        -- Performs a single-step reduction. Here, we do a lookup on each
+        -- sub-container ID to see whether it has been reduced. If it has, we
+        -- accumulate the result (via (||)). If it hasn't, we leave it for
+        -- later.
+        singleStepReduce :: IntSet.Key -> (Bool, ColorIDSet) -> (Bool, ColorIDSet)
+        singleStepReduce k (b, cs) = case IntMap.lookup k resolvedContainers of
+            Nothing   -> (b, IntSet.insert k cs)
+            Just bool -> (bool || b, cs)
+
+-- Converts a list of containment rules into a map of rules. This is easier to
+-- process quickly.
+mapifyRules :: [ContainmentRule] -> RuleMap
+mapifyRules = IntMap.fromList . map flattenRule
+  where
+    flattenRule :: ContainmentRule -> (ColorID, ColorIDSet)
+    flattenRule (ContainmentRule colorID rules) = (colorID, IntSet.fromList (map snd rules))
+
+-- Converts a raw rule (using strings as color names) to a containment rule
+-- (which uses IDs instead of strings) within our state.
+convertRule :: RawContainmentRule -> State ColorState ContainmentRule
 convertRule (RawContainmentRule color rules) = do
   colorID <- colorToIDOrAdd color
   let (quantities, colors) = unzip rules
   colorIDs <- mapM colorToIDOrAdd colors
   return (ContainmentRule colorID (zip quantities colorIDs))
 
+-- Finds a list of colors (as strings) that can contain the indicated color.
+colorsContainingColorInRules :: [RawContainmentRule] -> Color -> State ColorState [Color]
+colorsContainingColorInRules rawRules targetColorName = do
+  ruleMap <- mapM convertRule rawRules <&> mapifyRules
+  targetID <- colorToID targetColorName
+  let colorIDs = colorIDsContainingColorID targetID ruleMap
+  mapM idToColor colorIDs
+
+-- Converts an input file into a list of raw containment rules.
 readInputFile :: String -> IO [RawContainmentRule]
 readInputFile fileName = do
   content <- readFile fileName
   return (map read (lines content))
 
+-- The name of the source file to read inputs from.
+sourceFile :: String
+sourceFile = "input.txt"
+
+-- This is the special, target color we are working with, per the instructions.
+targetColor :: Color
+targetColor = "shiny gold"
+
 main :: IO ()
 main = do
   rawRules <- readInputFile sourceFile
-  let rules = initialized *-> mapM convertRule rawRules
-  mapM_ print (zip [1..] rules)
+  let colors = initialized *-> colorsContainingColorInRules rawRules targetColor
+  putStrLn ("There are " ++ show (length colors) ++ " colors of bags that can contain a " ++ targetColor ++ " bag.")
