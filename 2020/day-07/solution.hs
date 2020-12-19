@@ -8,6 +8,7 @@ import Text.ParserCombinators.ReadP (
   ReadP,
   char, choice, get, many1, manyTill, munch1, optional, satisfy, sepBy, skipSpaces, string)
 import Text.Read (readPrec, readP_to_Prec)
+import Data.Tree
 import Data.Tuple (swap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
@@ -51,6 +52,7 @@ type IDToColorMap = IntMap.IntMap Color
 type ColorIDMap = IntMap.IntMap
 type ColorIDSet = IntSet.IntSet
 type RuleMap = ColorIDMap (ColorIDMap Int)
+type RuleTree = Tree (ColorID, Int)
 
 -- A representation of the internal state, where colors are mapped to IDs.
 data ColorState = ColorState { colorsToIDs :: ColorToIDMap
@@ -124,6 +126,14 @@ instance Read RawContainmentRule where
 -- Correlates a color's ID to a list of colors that it can contain and the
 -- containable quantity of each.
 data ContainmentRule = ContainmentRule ColorID [(Int, ColorID)] deriving (Eq, Ord, Show)
+
+--------------------------------------------------------------------------------
+--
+-- NOTE: The Part 1 code is more complicated than it needs to be. I was
+--       specifically looking to do this as a fixed-point computation for fun.
+--       Part 2 is more reasonable.
+--
+--------------------------------------------------------------------------------
 
 -- Produces a list of color IDs that can contain the indicated color, based on
 -- the rules provided in a given RuleMap.
@@ -218,6 +228,43 @@ colorsContainingColorInRules rawRules targetColorName = do
   let colorIDs = colorIDsContainingColorID targetID ruleMap
   mapM idToColor colorIDs
 
+--------------------------------------------------------------------------------
+--
+-- This is the code for Part 2.
+--
+--------------------------------------------------------------------------------
+
+-- Combines the elements of a tree, using a different function for the child-
+-- to-parent combinations and the child-to-child combinations. Both directions
+-- of combination take the parent (start) node's value as input first.
+combineTree :: (a -> b -> b) -> (a -> [b] -> b) -> Tree a -> b
+combineTree combineDown combineAcross tree =
+  combineAcross v (map (combineDown v . combineTree combineDown combineAcross) children)
+  where
+    v = rootLabel tree
+    children = subForest tree
+
+-- Sums the quantities of a color tree.
+sumChildrenInclusive :: RuleTree -> Int
+sumChildrenInclusive tree = combineTree (*) (foldr (+)) quantityTree - rootQuantity
+  where
+    quantityTree = fmap snd tree
+    rootQuantity = rootLabel quantityTree
+
+-- Constructs a tree from the mapping of rules.
+treeFromRulesWithRoot :: RuleMap -> ColorID -> RuleTree
+treeFromRulesWithRoot rules rootID = unfoldTree treeFromRule (rootID, 1)
+  where
+    treeFromRule :: (ColorID, Int) -> ((ColorID, Int), [(ColorID, Int)])
+    treeFromRule (colorID, quantity) = ((colorID, quantity), IntMap.toList (rules IntMap.! colorID))
+
+-- Produces a tree rooted at the given color.
+treeFromColor :: [RawContainmentRule] -> Color -> State ColorState RuleTree
+treeFromColor rawRules targetColorName = do
+  ruleMap <- mapM convertRule rawRules <&> mapifyRules
+  targetID <- colorToID targetColorName
+  return (treeFromRulesWithRoot ruleMap targetID)
+
 -- Converts an input file into a list of raw containment rules.
 readInputFile :: String -> IO [RawContainmentRule]
 readInputFile fileName = do
@@ -237,3 +284,5 @@ main = do
   rawRules <- readInputFile sourceFile
   let colors = initialized *-> colorsContainingColorInRules rawRules targetColor
   putStrLn ("There are " ++ show (length colors) ++ " colors of bags that can contain a " ++ targetColor ++ " bag.")
+  let numberOfBags = initialized *-> treeFromColor rawRules targetColor <&> sumChildrenInclusive
+  putStrLn ("The " ++ targetColor ++ " bag contains " ++ show numberOfBags ++ " other bags.")
