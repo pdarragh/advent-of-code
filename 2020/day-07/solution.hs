@@ -8,7 +8,7 @@ import Text.ParserCombinators.ReadP (
   ReadP,
   char, choice, get, many1, manyTill, munch1, optional, satisfy, sepBy, skipSpaces, string)
 import Text.Read (readPrec, readP_to_Prec)
-import Data.Tree
+import Data.Tree (Tree(..), unfoldTree)
 import Data.Tuple (swap)
 import qualified Data.IntMap.Strict as IntMap
 import qualified Data.IntSet as IntSet
