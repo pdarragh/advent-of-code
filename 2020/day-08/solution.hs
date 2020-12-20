@@ -1,3 +1,5 @@
+{-# LANGUAGE MultiWayIf, ScopedTypeVariables #-}
+
 import Control.Applicative ((<|>))
 import Control.Monad.State
 import Data.Bool (bool)
@@ -5,17 +7,6 @@ import Data.Char (isDigit, toLower)
 import Data.Functor (($>))
 import Text.ParserCombinators.ReadP (ReadP, char, munch1, sepBy, skipSpaces, string)
 import Text.Read (readListPrec, readPrec, readP_to_Prec)
-
--- Takes two applicative functions expecting an argument and passes the same
--- argument to both, discarding the result returned by the first.
-(*>*>) :: Applicative f => (a -> f b) -> (a -> f c) -> (a -> f c)
-(*>*>) f1 f2 a = f1 a *> f2 a
-infix 4 *>*>
-
--- Similar to Data.Bool.bool, except each element is a function expecting a
--- value. The same value is given to all three elements.
-boolF :: (a -> b) -> (a -> b) -> (a -> Bool) -> a -> b
-boolF t f c x = bool (t x) (f x) (c x)
 
 -- Describes the instruction types.
 data InstructionType
@@ -103,26 +94,22 @@ executeInstruction (Instruction t (InstructionValue v)) = case t of
   Jmp -> updateIpByOffset v
   Nop -> incrementIp
 
--- Executes the given instructions, starting at the top, but stops whenever an
--- instruction is going to be executed for a second time.
-runInstructionsWithoutLoop :: [Instruction] -> State IPUState ()
-runInstructionsWithoutLoop instructions = runInstructionsWithoutLoop' (replicate (length instructions) True)
+runInstructions :: forall a. [Instruction] -> State IPUState a -> State IPUState (Either Int a)
+runInstructions instructions sentinelOnLoop = runInstructions' initialLoopMap
   where
-    runInstructionsWithoutLoop' :: [Bool] -> State IPUState ()
-    runInstructionsWithoutLoop' notYetRun =
-      -- NOTE: This is not the best way to write this. It would be more
-      --       straightforward to just use do-notation, I think, but I wanted to
-      --       play with this a bit.
-      currentIp >>= boolF (void . return)
-                          (runInstruction *>*> runInstructionsWithoutLoop' . markAsRun notYetRun)
-                          (notYetRun !!)
+    initialLoopMap :: [Bool]
+    initialLoopMap = replicate (length instructions) False
+    runInstructions' :: [Bool] -> State IPUState (Either Int a)
+    runInstructions' alreadyRun = do
+      ip <- currentIp
+      if
+        | ip > length instructions -> Left <$> currentAcc
+        | alreadyRun !! ip         -> Right <$> sentinelOnLoop
+        | otherwise                -> runInstruction ip >> runInstructions' (markAsRun ip alreadyRun)
     runInstruction :: Int -> State IPUState ()
     runInstruction ip = executeInstruction (instructions !! ip)
-    markAsRun :: [Bool] -> Int -> [Bool]
-    markAsRun notYetRun ip = precs ++ [False] ++ succs
-      where
-        precs = reverse (drop 1 (reverse precs'))
-        (precs', succs) = splitAt ip notYetRun
+    markAsRun :: Int -> [Bool] -> [Bool]
+    markAsRun ip alreadyRun = take (ip - 1) alreadyRun ++ [True] ++ drop ip alreadyRun
 
 -- Converts a file to a list of instructions to execute.
 readInputFile :: String -> IO [Instruction]
@@ -136,5 +123,5 @@ sourceFile = "input.txt"
 main :: IO ()
 main = do
   instructions <- readInputFile sourceFile
-  let acc = fst (initializeIPU (runInstructionsWithoutLoop instructions >> currentAcc))
+  let Right acc = fst (initializeIPU (runInstructions instructions currentAcc))
   putStrLn ("Accumulator value after final non-looping instruction: " ++ show acc)
