@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiWayIf, ScopedTypeVariables #-}
+{-# LANGUAGE MultiWayIf #-}
 
 import Control.Applicative ((<|>))
 import Control.Monad.State
@@ -7,6 +7,15 @@ import Data.Char (isDigit, toLower)
 import Data.Functor (($>))
 import Text.ParserCombinators.ReadP (ReadP, char, munch1, sepBy, skipSpaces, string)
 import Text.Read (readListPrec, readPrec, readP_to_Prec)
+
+-- Updates an element in a list by applying a function to it. Throws an error if
+-- the given index is out of the bounds of the list.
+updateWith :: (a -> a) -> Int -> [a] -> [a]
+updateWith xf idx xs
+  | idx < 0 || idx >= length xs =
+    error "index out of bounds"
+  | otherwise =
+    take idx xs ++ [xf (xs !! idx)] ++ drop (idx + 1) xs
 
 -- Describes the instruction types.
 data InstructionType
@@ -42,7 +51,7 @@ instance Read InstructionValue where
 data Instruction = Instruction InstructionType InstructionValue
 
 instance Show Instruction where
-  show (Instruction t (InstructionValue v)) = map toLower (show t) ++ " " ++ bool "-" "+" (v < 0) ++ show v
+  show (Instruction t (InstructionValue v)) = map toLower (show t) ++ " " ++ bool "+" "" (v < 0) ++ show v
 
 readInstruction :: ReadP Instruction
 readInstruction = Instruction <$> readInstructionType <* skipSpaces <*> readInstructionValue
@@ -63,8 +72,8 @@ initialState :: IPUState
 initialState = IPUState 0 0
 
 -- Starts up the IPU with zeroed-out registers.
-initializeIPU :: State IPUState a -> (a, IPUState)
-initializeIPU = flip runState initialState
+initializeIPU :: State IPUState a -> a
+initializeIPU = fst . flip runState initialState
 
 currentAcc :: State IPUState Int
 currentAcc = gets ipuAcc
@@ -94,22 +103,77 @@ executeInstruction (Instruction t (InstructionValue v)) = case t of
   Jmp -> updateIpByOffset v
   Nop -> incrementIp
 
-runInstructions :: forall a. [Instruction] -> State IPUState a -> State IPUState (Either Int a)
-runInstructions instructions sentinelOnLoop = runInstructions' initialLoopMap
+-- Runs a given set of instructions, halting if a loop is encountered.
+--
+-- The return value is a pair where the first element is the order of executed
+-- instruction pointers (constituting a rudimentary form of trace), and the
+-- second element is the final accumulated value in the accumulation register.
+-- However, that accumulated value is wrapped in either a Left (indicating the
+-- execution terminated successfully by incriminating past the final instruction)
+-- or a Right (indicating execution was halted because either the instruction
+-- pointer was set to a value outside the list of instructions, or else a loop
+-- was detected and terminated).
+runInstructions :: [Instruction] -> State IPUState ([Int], Either Int Int)
+runInstructions instructions = runInstructions' initialLoopMap [] >>= finalizeResult
   where
     initialLoopMap :: [Bool]
     initialLoopMap = replicate (length instructions) False
-    runInstructions' :: [Bool] -> State IPUState (Either Int a)
-    runInstructions' alreadyRun = do
+    runInstructions' :: [Bool] -> [Int] -> State IPUState ([Int], Int -> Either Int Int)
+    runInstructions' alreadyRun execOrder = do
       ip <- currentIp
       if
-        | ip > length instructions -> Left <$> currentAcc
-        | alreadyRun !! ip         -> Right <$> sentinelOnLoop
-        | otherwise                -> runInstruction ip >> runInstructions' (markAsRun ip alreadyRun)
-    runInstruction :: Int -> State IPUState ()
-    runInstruction ip = executeInstruction (instructions !! ip)
+        | ip == length instructions          -> return (reverse execOrder, Left)
+        | ip < 0 || ip > length instructions -> return (reverse execOrder, Right)
+        | alreadyRun !! ip                   -> return (reverse execOrder, Right)
+        | otherwise                          -> executeInstruction (instructions !! ip)
+                                                >> runInstructions' (markAsRun ip alreadyRun) (ip : execOrder)
     markAsRun :: Int -> [Bool] -> [Bool]
-    markAsRun ip alreadyRun = take (ip - 1) alreadyRun ++ [True] ++ drop ip alreadyRun
+    markAsRun = updateWith (const True)
+    finalizeResult :: ([Int], Int -> Either Int Int) -> State IPUState ([Int], Either Int Int)
+    finalizeResult (l, rf) = do
+      acc <- currentAcc
+      return (l, rf acc)
+
+-- Assumes a given set of instructions has a single fault and attempts to fix
+-- that fault, returning a triple if the fault is found and fixed.
+--
+-- The return value is either Nothing (the fault could not be found) or else
+-- a triple consisting of:
+--   1. The index of the faulty instruction that was fixed.
+--   2. The execution trace of the instructions.
+--   3. The final value in the accumulation register.
+--
+-- It is assumed that any fault in the instructions lies within either a Jmp
+-- that should be a Nop, or a Nop that should be a Jmp. This function is naive
+-- and simply iterates over each of the Jmp/Nop instructions and swaps it.
+--
+-- NOTE: This solution is embarrassingly parallel and could be sped up
+--       considerably by naive threading, but that sounds like too much for me.
+swapJmpsAndNops :: [Instruction] -> Maybe (Int, [Int], Int)
+swapJmpsAndNops instructions = swapJmpsAndNops' ipsToSwap
+  where
+    ipsToSwap :: [Int]
+    ipsToSwap = map fst (filter (isJmpOrNop . snd) (zip [0..] instructions))
+    isJmpOrNop :: Instruction -> Bool
+    isJmpOrNop (Instruction t _)
+      | t == Jmp || t == Nop = True
+      | otherwise            = False
+    swapJmpsAndNops' :: [Int] -> Maybe (Int, [Int], Int)
+    swapJmpsAndNops' [] = Nothing
+    swapJmpsAndNops' (ip:ips) =
+      let result = initializeIPU (runInstructions (swapInstruction ip)) in
+      case snd result of
+        Left acc -> Just (ip, fst result, acc)
+        Right _  -> swapJmpsAndNops' ips
+    swapInstruction :: Int -> [Instruction]
+    swapInstruction ip = updateWith swapInstruction' ip instructions
+    swapInstruction' :: Instruction -> Instruction
+    swapInstruction' (Instruction t v) = Instruction t' v
+      where
+        t' = case t of
+          Jmp -> Nop
+          Nop -> Jmp
+          _   -> t
 
 -- Converts a file to a list of instructions to execute.
 readInputFile :: String -> IO [Instruction]
@@ -123,5 +187,13 @@ sourceFile = "input.txt"
 main :: IO ()
 main = do
   instructions <- readInputFile sourceFile
-  let Right acc = fst (initializeIPU (runInstructions instructions currentAcc))
-  putStrLn ("Accumulator value after final non-looping instruction: " ++ show acc)
+  -- Part 1 output.
+  let initialAcc = initializeIPU (runInstructions instructions)
+  case snd initialAcc of
+    Left acc  -> putStrLn ("Accumulator value after termination without replacements: " ++ show acc)
+    Right acc -> putStrLn ("Accumulator value after stopping an infinite loop: " ++ show acc)
+  -- Part 2 output.
+  let secondAcc = swapJmpsAndNops instructions
+  case secondAcc of
+    Nothing  -> putStrLn "Was unable to find an instruction to modify to prevent infinite loop."
+    Just (_, _, acc) -> putStrLn ("Accumulator value after modifying an instruction: " ++ show acc)
