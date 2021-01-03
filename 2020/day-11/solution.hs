@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards, ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards #-}
 
 import Control.Applicative ((<|>))
 import Data.List (intercalate)
@@ -107,11 +107,9 @@ validCoord g (x, y)
 -- Constructs a list of the neighbors of a given cell by coordinate, excluding
 -- the original cell. This is a list of the eight cells surrounding the initial
 -- cell, but accounts for cells at the borders of the grid as well.
-getNeighbors :: forall a. Grid a -> Coord -> [a]
-getNeighbors g (x, y) = filteredNeighbors
+getNeighbors :: Grid a -> Coord -> [a]
+getNeighbors g (x, y) = map (getCell g) filteredCoords
   where
-    filteredNeighbors :: [a]
-    filteredNeighbors = map (getCell g) filteredCoords
     filteredCoords :: [Coord]
     filteredCoords = filter validNeighborCoord neighborCoords
     neighborCoords :: [Coord]
