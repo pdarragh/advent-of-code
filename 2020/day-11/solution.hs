@@ -1,12 +1,14 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE RecordWildCards, ScopedTypeVariables #-}
 
 import Control.Applicative ((<|>))
 import Data.List (intercalate)
+import Data.Maybe (fromJust, isJust)
 import Text.ParserCombinators.ReadP (ReadP, char, many1)
 import Text.Read (readListPrec, readPrec, readP_to_Prec)
 
 import Debug.Trace (trace)
 
+-- The three states a cell can occupy in this problem.
 data CellState
   = Floor
   | Empty
@@ -82,8 +84,8 @@ coords g = [(x, y) | y <- [0..height g - 1]
 
 -- Constructs a new grid consisting of pairs of the old values and their
 -- coordinates within the grid. Useful for debugging.
-gridWithCoords :: Grid a -> Grid (Coord, a)
-gridWithCoords g = g{cells=zip (coords g) (cells g)}
+gridWithCoords :: Grid a -> Grid (a, Coord)
+gridWithCoords g = g{cells=zip (cells g) (coords g)}
 
 -- Gets a cell out of a grid by its coordinate location. Throws an error if the
 -- coordinate is invalid.
@@ -118,12 +120,18 @@ getNeighbors g (x, y) = filteredNeighbors
     validNeighborCoord :: Coord -> Bool
     validNeighborCoord c = validCoord g c && c /= (x, y)
 
+-- A record of how to attempt to perform an update. Modeling updates this way
+-- allows us to generalize the update function.
+data UpdateRule = UpdateRule { fromState       :: CellState
+                             , toState         :: CellState
+                             , updateCondition :: Grid CellState -> Coord -> Bool }
+
 -- Updates the seats of a grid by finding a fixed point.
 -- NOTE: This function also emits output as an unsafe side-effect. This is
 --       because the algorithm is not very fast and it can appear stuck, even
 --       when progress is being made. I'm sorry.
-updateSeats :: Grid CellState -> Grid CellState
-updateSeats = updateSeats' 0
+updateSeats :: [UpdateRule] -> Grid CellState -> Grid CellState
+updateSeats rules = updateSeats' 0
   where
     -- Computes a single step of the grid and determines whether to make another
     -- recursion (based on whether the new grid is identical to the old one).
@@ -135,34 +143,36 @@ updateSeats = updateSeats' 0
         -- Computes a single-step update of the grid, and may also emit output
         -- of how many steps we've taken so far.
         updatedGrid :: Grid CellState
-        updatedGrid = showIterations (updateSeatsStep g)
+        updatedGrid = showIterations (updateSeatsStep rules g)
         -- Unsafely shows how many steps we've taken so far.
         showIterations :: a -> a
         showIterations x = if mod n 10 == 0 then trace ("Recursive iteration step: " ++ show n) x else x
 
--- Updates all the seats in a grid exactly once. The rules are detailed in the
--- instructions, but briefly they are:
---   * If a seat is empty and has no occupied neighbors, it becomes occupied.
---   * If a seat is occupied and has 4+ occupied neighbors, it becomes empty.
---   * Otherwise, there is no change.
-updateSeatsStep :: Grid CellState -> Grid CellState
-updateSeatsStep g = updatedGrid
+
+-- Updates all the seats in a grid exactly once.
+updateSeatsStep :: [UpdateRule] -> Grid CellState -> Grid CellState
+updateSeatsStep rules g = updatedGrid
   where
     updatedGrid :: Grid CellState
-    updatedGrid = g{cells=fixSeats (coords g)}
-    fixSeats :: [Coord] -> [CellState]
-    fixSeats [] = []
-    fixSeats (c:cs) = updatedSeat : fixSeats cs
-      where
-        updatedSeat :: CellState
-        updatedSeat
-          | oldSeat == Empty    && notElem Occupied oldNeighbors                   = Occupied
-          | oldSeat == Occupied && length (filter (== Occupied) oldNeighbors) >= 4 = Empty
-          | otherwise = oldSeat
-        oldSeat :: CellState
-        oldSeat = getCell g c
-        oldNeighbors :: [CellState]
-        oldNeighbors = getNeighbors g c
+    updatedGrid = fmap (uncurry updateSeat) coordGrid
+    coordGrid :: Grid (CellState, Coord)
+    coordGrid = gridWithCoords g
+    updateSeat :: CellState -> Coord -> CellState
+    updateSeat oldState c = case filter isJust (map (attemptUpdate oldState c) rules) of
+      []           -> oldState
+      (newState:_) -> fromJust newState
+    attemptUpdate :: CellState -> Coord -> UpdateRule -> Maybe CellState
+    attemptUpdate oldState c UpdateRule{..}
+      | fromState == oldState
+        && updateCondition g c = Just toState
+      | otherwise              = Nothing
+
+-- These are the rules that updates follow for Part 1's instructions. They are:
+--   * If a seat is empty and has no occupied neighbors, it becomes occupied.
+--   * If a seat is occupied and has 4+ occupied neighbors, it becomes empty.
+part1Rules :: [UpdateRule]
+part1Rules = [ UpdateRule Empty Occupied ((notElem Occupied .) . getNeighbors)
+             , UpdateRule Occupied Empty ((((>= 4) . length . filter (== Occupied)) .) . getNeighbors) ]
 
 readInputFile :: String -> IO (Grid CellState)
 readInputFile fileName = do
@@ -175,6 +185,6 @@ sourceFile = "input.txt"
 main :: IO ()
 main = do
   grid <- readInputFile sourceFile
-  let updatedGrid = updateSeats grid
-      occupiedSeats = length (filter (== Occupied) (cells updatedGrid))
+  let part1UpdatedGrid = updateSeats part1Rules grid
+      occupiedSeats = length (filter (== Occupied) (cells part1UpdatedGrid))
   putStrLn ("\nNumber of seats occupied at the end: " ++ show occupiedSeats)
