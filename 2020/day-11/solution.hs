@@ -1,7 +1,9 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 import Control.Applicative ((<|>))
-import Data.List (intercalate)
+import Data.List (find, intercalate)
 import Data.Maybe (fromJust, isJust)
 import Text.ParserCombinators.ReadP (ReadP, char, many1)
 import Text.Read (readListPrec, readPrec, readP_to_Prec)
@@ -104,6 +106,40 @@ validCoord g (x, y)
   | y < 0 || y >= height g = False
   | otherwise              = True
 
+data Direction = NW | N | NE | W | E | SW | S | SE
+
+allDirections :: [Direction]
+allDirections = [NW, N, NE, W, E, SW, S, SE]
+
+-- On this coordinate plane, the top-left is the origin, with the y-axis moving
+-- top-to-bottom and the x-axis moving left-to-right. (In a traditional
+-- coordinate plane, the origin is in the bottom-left.)
+unit :: Direction -> Coord
+unit NW = (-1, -1)
+unit N  = ( 0, -1)
+unit NE = ( 1, -1)
+unit W  = (-1,  0)
+unit E  = ( 1,  0)
+unit SW = (-1,  1)
+unit S  = ( 0,  1)
+unit SE = ( 1,  1)
+
+scale :: Coord -> Int -> Coord
+scale (x, y) s = (s * x, s * y)
+
+-- Constructs an infinite list of steps starting at the given coordinate and
+-- traveling in the indicated direction.
+steps :: Coord -> Direction -> [Coord]
+steps c d = [add c (scale (unit d) i) | i <- [0..]]
+  where
+    add :: Coord -> Coord -> Coord
+    add (x1, y1) (x2, y2) = (x1 + x2, y1 + y2)
+
+-- Constructs a finite list of all the cells starting at the given coordinate
+-- and extending to the edge of the grid in the given direction.
+getCellsInDirection :: Grid a -> Coord -> Direction -> [a]
+getCellsInDirection g c d = map (getCell g) (takeWhile (validCoord g) (steps c d))
+
 -- Constructs a list of the neighbors of a given cell by coordinate, excluding
 -- the original cell. This is a list of the eight cells surrounding the initial
 -- cell, but accounts for cells at the borders of the grid as well.
@@ -117,6 +153,15 @@ getNeighbors g (x, y) = map (getCell g) filteredCoords
                                , x' <- map (+ x) [-1..1]]
     validNeighborCoord :: Coord -> Bool
     validNeighborCoord c = validCoord g c && c /= (x, y)
+
+-- Constructs a list of the neighbors of a given cell according to a predicate.
+-- In this context, "neighbors" is applied loosely and means "the closest cell
+-- in each direction which satisfies the predicate."
+getFirstNeighborsWithPredicate :: forall a. (a -> Bool) -> Grid a -> Coord -> [a]
+getFirstNeighborsWithPredicate p g c = map fromJust (filter isJust (map (find p) radialCells))
+  where
+    radialCells :: [[a]]
+    radialCells = map (drop 1 . getCellsInDirection g c) allDirections
 
 -- A record of how to attempt to perform an update. Modeling updates this way
 -- allows us to generalize the update function.
@@ -136,7 +181,7 @@ updateSeats rules = updateSeats' 0
     updateSeats' :: Int -> Grid CellState -> Grid CellState
     updateSeats' n g
       | updatedGrid /= g = updateSeats' (n + 1) updatedGrid
-      | otherwise        = updatedGrid
+      | otherwise        = trace ("Total recursive iteration steps: " ++ show n) updatedGrid
       where
         -- Computes a single-step update of the grid, and may also emit output
         -- of how many steps we've taken so far.
@@ -172,17 +217,28 @@ part1Rules :: [UpdateRule]
 part1Rules = [ UpdateRule Empty Occupied ((notElem Occupied .) . getNeighbors)
              , UpdateRule Occupied Empty ((((>= 4) . length . filter (== Occupied)) .) . getNeighbors) ]
 
+-- These are the rules that updates follow for Part 2's instructions. They are:
+--   * If a seat is empty and has no occupied neighbors, it becomes occupied.
+--   * If a seat is occupied and has 5+ occupied neighbors, it becomes empty.
+part2Rules :: [UpdateRule]
+part2Rules = [ UpdateRule Empty Occupied ((null .) . getFirstNeighborsWithPredicate (== Occupied))
+             , UpdateRule Occupied Empty ((((>= 5) . length) .) . getFirstNeighborsWithPredicate (== Occupied)) ]
+
 readInputFile :: String -> IO (Grid CellState)
 readInputFile fileName = do
   content <- readFile fileName
   return (makeGrid (map read (lines content)))
 
 sourceFile :: String
-sourceFile = "input.txt"
+sourceFile = "input2.txt"
 
 main :: IO ()
 main = do
   grid <- readInputFile sourceFile
   let part1UpdatedGrid = updateSeats part1Rules grid
-      occupiedSeats = length (filter (== Occupied) (cells part1UpdatedGrid))
-  putStrLn ("\nNumber of seats occupied at the end: " ++ show occupiedSeats)
+      occupiedSeats1 = length (filter (== Occupied) (cells part1UpdatedGrid))
+  putStrLn ("\nNumber of seats occupied at the end of part 1 fixed point: " ++ show occupiedSeats1)
+  putStrLn "\n"
+  let part2UpdatedGrid = updateSeats part2Rules grid
+      occupiedSeats2 = length (filter (== Occupied) (cells part2UpdatedGrid))
+  putStrLn ("\nNumber of seats occupied at the end of part 2 fixed point: " ++ show occupiedSeats2)
