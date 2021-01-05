@@ -221,8 +221,8 @@ part1Rules = [ UpdateRule Empty Occupied ((notElem Occupied .) . getNeighbors)
 --   * If a seat is empty and has no occupied neighbors, it becomes occupied.
 --   * If a seat is occupied and has 5+ occupied neighbors, it becomes empty.
 part2Rules :: [UpdateRule]
-part2Rules = [ UpdateRule Empty Occupied ((null .) . getFirstNeighborsWithPredicate (== Occupied))
-             , UpdateRule Occupied Empty ((((>= 5) . length) .) . getFirstNeighborsWithPredicate (== Occupied)) ]
+part2Rules = [ UpdateRule Empty Occupied ((notElem Occupied .) . getFirstNeighborsWithPredicate (/= Floor))
+             , UpdateRule Occupied Empty ((((>= 5) . length . filter (== Occupied)) .) . getFirstNeighborsWithPredicate (/= Floor)) ]
 
 readInputFile :: String -> IO (Grid CellState)
 readInputFile fileName = do
@@ -230,15 +230,17 @@ readInputFile fileName = do
   return (makeGrid (map read (lines content)))
 
 sourceFile :: String
-sourceFile = "input2.txt"
+sourceFile = "input.txt"
 
 main :: IO ()
 main = do
   grid <- readInputFile sourceFile
+  putStrLn "Calculating seats occupied using fixed point of applying part 1 rules..."
   let part1UpdatedGrid = updateSeats part1Rules grid
       occupiedSeats1 = length (filter (== Occupied) (cells part1UpdatedGrid))
-  putStrLn ("\nNumber of seats occupied at the end of part 1 fixed point: " ++ show occupiedSeats1)
+  putStrLn ("\nSeats occupied using part 1 rules: " ++ show occupiedSeats1)
   putStrLn "\n"
+  putStrLn "Calculating seats occupied using fixed point of applying part 2 rules..."
   let part2UpdatedGrid = updateSeats part2Rules grid
       occupiedSeats2 = length (filter (== Occupied) (cells part2UpdatedGrid))
-  putStrLn ("\nNumber of seats occupied at the end of part 2 fixed point: " ++ show occupiedSeats2)
+  putStrLn ("\nSeats occupied using part 2 rules: " ++ show occupiedSeats2)
