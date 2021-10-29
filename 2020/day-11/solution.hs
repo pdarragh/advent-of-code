@@ -4,7 +4,7 @@
 
 import Control.Applicative ((<|>))
 import Data.List (find, intercalate)
-import Data.Maybe (fromJust, isJust)
+import Data.Maybe (fromJust, isJust, mapMaybe)
 import Text.ParserCombinators.ReadP (ReadP, char, many1)
 import Text.Read (readListPrec, readPrec, readP_to_Prec)
 
@@ -158,7 +158,7 @@ getNeighbors g (x, y) = map (getCell g) filteredCoords
 -- In this context, "neighbors" is applied loosely and means "the closest cell
 -- in each direction which satisfies the predicate."
 getFirstNeighborsWithPredicate :: forall a. (a -> Bool) -> Grid a -> Coord -> [a]
-getFirstNeighborsWithPredicate p g c = map fromJust (filter isJust (map (find p) radialCells))
+getFirstNeighborsWithPredicate p g c = mapMaybe (find p) radialCells
   where
     radialCells :: [[a]]
     radialCells = map (drop 1 . getCellsInDirection g c) allDirections
