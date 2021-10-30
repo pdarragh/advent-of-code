@@ -10,10 +10,10 @@ import Text.Read (readPrec, readP_to_Prec, readListPrec)
 data CardinalDirection = North | South | East | West deriving (Eq)
 
 instance Show CardinalDirection where
-  show North   = "N"
-  show South   = "S"
-  show East    = "E"
-  show West    = "W"
+  show North = "N"
+  show South = "S"
+  show East  = "E"
+  show West  = "W"
 
 readCardinalDirection :: ReadP CardinalDirection
 readCardinalDirection = North <$ char 'N' <|>
@@ -27,8 +27,8 @@ instance Read CardinalDirection where
 data RotationalDirection = Left | Right deriving (Eq)
 
 instance Show RotationalDirection where
-  show Left    = "L"
-  show Right   = "R"
+  show Left  = "L"
+  show Right = "R"
 
 readRotationalDirection :: ReadP RotationalDirection
 readRotationalDirection = Left  <$ char 'L' <|>
@@ -81,13 +81,15 @@ instance Read Command where
   readPrec = readP_to_Prec (const readCommand)
   readListPrec = readP_to_Prec (const readCommands)
 
+--
+-- Location-Based Figuring
+--
+
 data ShipState = ShipState { facing :: CardinalDirection
                            , x      :: Value
-                           , y      :: Value }
-  deriving (Eq)
-
-instance Show ShipState where
-  show s = "{ facing = " ++ show (facing s) ++ ", x = " ++ show (x s) ++ ", y = " ++ show (y s) ++ " }"
+                           , y      :: Value
+                           }
+  deriving (Eq, Show)
 
 initialShip :: ShipState
 initialShip = ShipState East 0 0
@@ -124,8 +126,51 @@ updateShip s (Command (Rotational rd, v)) =
 updateShip s (Command (Forward, v)) =
   translateShip s (facing s) v
 
-manhattanDistance :: ShipState -> Value
-manhattanDistance s = abs (x s) + abs (y s)
+--
+-- Waypoint-Based Figuring
+--
+
+data WaypointState = WaypointState { shipX :: Value
+                                   , shipY :: Value
+                                   , wayX :: Value
+                                   , wayY :: Value
+                                   }
+  deriving (Eq, Show)
+
+initialState :: WaypointState
+initialState = WaypointState 0 0 10 1
+
+translateWaypoint :: WaypointState -> CardinalDirection -> Value -> WaypointState
+translateWaypoint s North v = s { wayY = wayY s + v }
+translateWaypoint s East v = s { wayX = wayX s + v }
+translateWaypoint s South v = s { wayY = wayY s - v }
+translateWaypoint s West v = s { wayX = wayX s - v }
+
+rotateWaypoint :: WaypointState -> RotationalDirection -> Value -> WaypointState
+rotateWaypoint s _ 0 = s
+rotateWaypoint s Right d =
+  rotateWaypoint (s { wayX = wayY s, wayY = -(wayX s) }) Right (d - 90)
+rotateWaypoint s Left d =
+  rotateWaypoint (s { wayX = -(wayY s), wayY = wayX s }) Left (d - 90)
+
+translateShipTowardsWaypoint :: WaypointState -> Int -> WaypointState
+translateShipTowardsWaypoint s 0 = s
+translateShipTowardsWaypoint s i =
+  translateShipTowardsWaypoint (s { shipX = shipX s + wayX s
+                                  , shipY = shipY s + wayY s
+                                  }) (i - 1)
+
+updateState :: WaypointState -> Command -> WaypointState
+updateState s (Command (Cardinal cd, v)) = translateWaypoint s cd v
+updateState s (Command (Rotational rd, v)) = rotateWaypoint s rd v
+updateState s (Command (Forward, v)) = translateShipTowardsWaypoint s v
+
+--
+-- Common
+--
+
+manhattanDistance :: Value -> Value -> Value
+manhattanDistance x y = abs x + abs y
 
 readInputFile :: String -> IO [Command]
 readInputFile fileName = do
@@ -138,7 +183,11 @@ sourceFile = "input.txt"
 main :: IO ()
 main = do
   instructions <- readInputFile sourceFile
-  let finalShip = foldl updateShip initialShip instructions
-      distance = manhattanDistance finalShip
-  putStrLn ("Final ship state: " ++ show finalShip)
-  putStrLn ("Manhattan distance of final ship position from origin: " ++ show distance)
+  let finalShip1 = foldl updateShip initialShip instructions
+      distance1 = manhattanDistance (x finalShip1) (y finalShip1)
+  putStrLn ("Part 1 final ship state: " ++ show finalShip1)
+  putStrLn ("Part 1 Manhattan distance of final ship position from origin: " ++ show distance1)
+  let finalShip2 = foldl updateState initialState instructions
+      distance2 = manhattanDistance (shipX finalShip2) (shipY finalShip2)
+  putStrLn ("Part 2 final ship state: " ++ show finalShip2)
+  putStrLn ("Part 2 Manhattan distance of final ship position from origin: " ++ show distance2)
