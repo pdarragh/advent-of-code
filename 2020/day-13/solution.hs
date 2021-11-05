@@ -19,15 +19,16 @@ readInput = do
 instance Read BusInput where
   readPrec = readP_to_Prec (const readInput)
 
-findSoonestID :: Int -> [Int] -> Int
+findSoonestID :: Int -> [Int] -> (Int, Int)
 findSoonestID time bids =
-  let (bid, diff) = foldl1 (\t1@(mbid, mdiff) t2@(bid, diff) ->
-                             if mdiff < diff then t1 else t2)
-                   (map processID bids)
-  in bid * diff
+  foldl1
+    ( \t1@(mbid, mdiff) t2@(bid, diff) ->
+        if mdiff < diff then t1 else t2
+    )
+    (map processID bids)
   where
     processID :: Int -> (Int, Int)
-    processID bid = (bid, bid + (time `rem` bid))
+    processID bid = (bid, bid - (time `rem` bid))
 
 readInputFile :: String -> IO (Int, [Maybe Int])
 readInputFile fileName = do
@@ -41,5 +42,7 @@ sourceFile = "input.txt"
 main :: IO ()
 main = do
   (time, ids) <- readInputFile sourceFile
-  let soonestID = findSoonestID time (catMaybes ids)
-  putStrLn ("Soonest ID: " ++ show soonestID)
+  let (id, diff) = findSoonestID time (catMaybes ids)
+  putStrLn ("Soonest ID: " ++ show id)
+  putStrLn ("Diff: " ++ show diff)
+  putStrLn ("  ID * Diff = " ++ show (id * diff))
