@@ -1,4 +1,6 @@
+use std::fs;
+
 pub struct Solution {
-    pub part1: Option<fn(String) -> String>,
-    pub part2: Option<fn(String) -> String>,
+    pub part1: Option<fn(&fs::File) -> String>,
+    pub part2: Option<fn(&fs::File) -> String>,
 }
