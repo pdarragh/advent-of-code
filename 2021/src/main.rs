@@ -37,22 +37,22 @@ fn main() {
     if let Ok(file) = fs::File::open(input.clone()) {
         // Execute the solution.
         if let Some(f1) = solution.part1 {
-            println!("Part 1: {}", f1(&file));
+            println!("Day {} Part 1: {}", day, f1(&file));
         } else {
-            println!("Part 1 not implemented.");
+            println!("Day {} Part 1 not implemented.", day);
         }
     } else {
-        println!("Could not open file: {}", filename);
+        println!("Could not open Day {} file: {}", day, filename);
         return;
     }
     if let Ok(file) = fs::File::open(input.clone()) {
         if let Some(f2) = solution.part2 {
-            println!("Part 2: {}", f2(&file));
+            println!("Day {} Part 2: {}", day, f2(&file));
         } else {
-            println!("Part 2 not implemented.");
+            println!("Day {} Part 2 not implemented.", day);
         }
     } else {
-        println!("Could not open file: {}", filename);
+        println!("Could not open Day {} file: {}", day, filename);
         return;
     }
 }
