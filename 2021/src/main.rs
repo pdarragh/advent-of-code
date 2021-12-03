@@ -32,15 +32,20 @@ fn main() {
         println!("    {}", input.display());
         return;
     }
+    let solution = &solutions[day as usize - 1];
     let filename = input.to_str().unwrap();
     if let Ok(file) = fs::File::open(input.clone()) {
         // Execute the solution.
-        let solution = &solutions[day as usize - 1];
         if let Some(f1) = solution.part1 {
             println!("Part 1: {}", f1(&file));
         } else {
             println!("Part 1 not implemented.");
         }
+    } else {
+        println!("Could not open file: {}", filename);
+        return;
+    }
+    if let Ok(file) = fs::File::open(input.clone()) {
         if let Some(f2) = solution.part2 {
             println!("Part 2: {}", f2(&file));
         } else {
