@@ -79,9 +79,7 @@ reverseLookup key pairs = lookup key (map swap pairs)
 readField :: ReadP Field
 readField = do
   label <- getN 3
-  case reverseLookup label fieldLabels of
-    Nothing    -> pfail
-    Just field -> return field
+  maybe pfail return (reverseLookup label fieldLabels)
 
 instance Read Field where
   -- Reads a field from a string.
@@ -182,7 +180,7 @@ requiredFieldValidators =
 -- are present.
 passportContainsRequiredFields :: Passport -> Bool
 passportContainsRequiredFields (Passport specifications) =
-  all (`elem` map getField specifications) (map fst requiredFieldValidators)
+  all ((`elem` map getField specifications) . fst) requiredFieldValidators
 
 -- More complex (part 2) passport validation. After checking whether all
 -- required fields are present, validates those fields' values.
