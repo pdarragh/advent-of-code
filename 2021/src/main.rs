@@ -1,11 +1,15 @@
 mod solution;
 mod day01;
+mod day02;
 
 use std::env;
 use std::fs;
 
 fn main() {
-    let solutions = vec![day01::solution()];
+    let solutions = vec![
+        day01::solution(),
+        day02::solution(),
+    ];
     let args: Vec<String> = env::args().collect();
     // Must supply an argument.
     // TODO: Maybe just run all available solutions?
