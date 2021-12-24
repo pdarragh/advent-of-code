@@ -7,6 +7,7 @@ use std::ops::{Index, IndexMut};
 use std::io::BufReader;
 use std::io::prelude::*;
 
+#[derive(Debug)]
 struct Row((i32, bool), (i32, bool), (i32, bool), (i32, bool), (i32, bool));
 
 impl Index<i8> for Row {
@@ -50,6 +51,7 @@ impl Row {
     }
 }
 
+#[derive(Debug)]
 struct Board {
     rows: (Row, Row, Row, Row, Row),
     map: HashMap<i32, (i8, i8)>
@@ -154,7 +156,7 @@ impl Board {
     }
 }
 
-pub fn part1(file: &fs::File) -> String {
+fn process_boards(file: &fs::File) -> (String, String) {
     let reader = BufReader::new(file);
     let mut it = reader.lines().map(|l| l.unwrap());
 
@@ -181,30 +183,46 @@ pub fn part1(file: &fs::File) -> String {
         }
     }
 
-    let mut board_sum = None;
-    let mut last_number = numbers[0];
+    let mut first_board_sum = None;
+    let mut last_board_sum = None;
 
-    'numbers: for number in numbers {
-        last_number = number;
+    for number in numbers {
+        let mut drop_indices = vec![];
         for board_index in 0..boards.len() {
             let board = &mut boards[board_index];
             if board.try_mark_number(number) {
                 if board.has_won() {
-                    board_sum = Some(board.sum_unmarked());
-                    break 'numbers;
+                    if first_board_sum.is_none() {
+                        first_board_sum = Some((board.sum_unmarked(), number));
+                    }
+                    last_board_sum = Some((board.sum_unmarked(), number));
+                    drop_indices.push(board_index);
                 }
             }
         }
+        drop_indices.sort_unstable();
+        drop_indices.reverse();
+        for drop_index in drop_indices {
+            boards.swap_remove(drop_index);
+        }
     }
 
-    if board_sum.is_none() {
-        panic!("No winning board found!");
+    match (first_board_sum, last_board_sum) {
+        (None, _) | (_, None) => { panic!("No winning board found!") }
+        (Some ((b1_sum, b1_num)),
+         Some ((b2_sum, b2_num))) => { ((b1_sum * b1_num).to_string(),
+                                        (b2_sum * b2_num).to_string()) }
     }
+}
 
-    let answer = board_sum.unwrap() * last_number;
-    return answer.to_string();
+pub fn part1(file: &fs::File) -> String {
+    process_boards(file).0
+}
+
+pub fn part2(file: &fs::File) -> String {
+    process_boards(file).1
 }
 
 pub fn solution() -> Solution {
-    Solution { part1: Some(part1), part2: None }
+    Solution { part1: Some(part1), part2: Some(part2) }
 }
