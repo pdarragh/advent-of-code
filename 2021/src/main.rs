@@ -1,4 +1,3 @@
-mod solution;
 mod day01;
 mod day02;
 mod day03;
@@ -8,11 +7,11 @@ use std::env;
 use std::fs;
 
 fn main() {
-    let solutions = vec![
-        day01::solution(),
-        day02::solution(),
-        day03::solution(),
-        day04::solution(),
+    let solutions: Vec<fn(&fs::File) -> (String, String)> = vec![
+        day01::solution,
+        day02::solution,
+        day03::solution,
+        day04::solution,
     ];
     let args: Vec<String> = env::args().collect();
     // Must supply an argument.
@@ -40,27 +39,14 @@ fn main() {
         println!("    {}", input.display());
         return;
     }
-    let solution = &solutions[day as usize - 1];
+    let solution_fn = &solutions[day as usize - 1];
     let filename = input.to_str().unwrap();
     if let Ok(file) = fs::File::open(input.clone()) {
-        // Execute the solution.
-        if let Some(f1) = solution.part1 {
-            println!("Day {} Part 1: {}", day, f1(&file));
-        } else {
-            println!("Day {} Part 1 not implemented.", day);
-        }
+        // Execute the solution function.
+        let (p1, p2) = solution_fn(&file);
+        println!("Day {} Part 1: {}", day, p1);
+        println!("Day {} Part 2: {}", day, p2);
     } else {
         println!("Could not open Day {} file: {}", day, filename);
-        return;
-    }
-    if let Ok(file) = fs::File::open(input.clone()) {
-        if let Some(f2) = solution.part2 {
-            println!("Day {} Part 2: {}", day, f2(&file));
-        } else {
-            println!("Day {} Part 2 not implemented.", day);
-        }
-    } else {
-        println!("Could not open Day {} file: {}", day, filename);
-        return;
     }
 }

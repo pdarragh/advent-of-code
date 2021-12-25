@@ -1,5 +1,3 @@
-use crate::solution::Solution;
-
 use std::fs;
 use std::io::BufReader;
 use std::io::prelude::*;
@@ -47,22 +45,6 @@ fn char_to_bit(c: char) -> i32 {
     else { panic!("Invalid bit char: {}", c) }
 }
 
-pub fn part1(file: &fs::File) -> String {
-    let reader = BufReader::new(file);
-    let mut counts = Vec::new();
-    for line in reader.lines().map(|l| l.unwrap()) {
-        if counts.is_empty() {
-            line.chars().for_each(|c| counts.push(char_to_bit(c)));
-        } else {
-            for (i, c) in line.chars().enumerate() {
-                counts[i] += char_to_bit(c);
-            }
-        }
-    }
-    let (gamma, epsilon) = gamma_and_epsilon(&counts);
-    (gamma * epsilon).to_string()
-}
-
 fn bit_to_count(b : &i32) -> i32 {
     if *b == 1 { 1 } else { -1 }
 }
@@ -107,17 +89,23 @@ fn oxygen_and_co2(values: &Vec<Vec<i32>>) -> (i32, i32) {
     (compute_oxygen(values), compute_co2(values))
 }
 
-pub fn part2(file: &fs::File) -> String {
+pub fn solution(file: &fs::File) -> (String, String) {
     let reader = BufReader::new(file);
+    let mut counts = Vec::new();
     let mut values = Vec::new();
     for line in reader.lines().map(|l| l.unwrap()) {
+        if counts.is_empty() {
+            line.chars().for_each(|c| counts.push(char_to_bit(c)));
+        } else {
+            for (i, c) in line.chars().enumerate() {
+                counts[i] += char_to_bit(c);
+            }
+        }
         let value = Vec::from(line.chars().map(char_to_bit).collect::<Vec<i32>>());
         values.push(value);
     }
+    let (gamma, epsilon) = gamma_and_epsilon(&counts);
     let (oxygen, co2) = oxygen_and_co2(&values);
-    (oxygen * co2).to_string()
-}
-
-pub fn solution() -> Solution {
-    Solution { part1: Some(part1), part2: Some(part2) }
+    ((gamma * epsilon).to_string(),
+     (oxygen * co2).to_string())
 }

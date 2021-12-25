@@ -1,5 +1,3 @@
-use crate::solution::Solution;
-
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::fs;
@@ -156,7 +154,7 @@ impl Board {
     }
 }
 
-fn process_boards(file: &fs::File) -> (String, String) {
+pub fn solution(file: &fs::File) -> (String, String) {
     let reader = BufReader::new(file);
     let mut it = reader.lines().map(|l| l.unwrap());
 
@@ -213,16 +211,4 @@ fn process_boards(file: &fs::File) -> (String, String) {
          Some ((b2_sum, b2_num))) => { ((b1_sum * b1_num).to_string(),
                                         (b2_sum * b2_num).to_string()) }
     }
-}
-
-pub fn part1(file: &fs::File) -> String {
-    process_boards(file).0
-}
-
-pub fn part2(file: &fs::File) -> String {
-    process_boards(file).1
-}
-
-pub fn solution() -> Solution {
-    Solution { part1: Some(part1), part2: Some(part2) }
 }

@@ -1,32 +1,22 @@
-use crate::solution::Solution;
-
 use std::fs;
 use std::i32::MIN;
 use std::io::BufReader;
 use std::io::prelude::*;
 
-pub fn part1(file: &fs::File) -> String {
+pub fn solution(file: &fs::File) -> (String, String) {
     let reader = BufReader::new(file);
-    let mut prev = MIN;
-    let mut greater = 0;
-    for line in reader.lines().map(|l| l.unwrap()) {
-        let curr = line.parse::<i32>().unwrap();
-        if prev != MIN && curr > prev {
-            greater += 1;
-        }
-        prev = curr;
-    }
-    greater.to_string()
-}
-
-pub fn part2(file: &fs::File) -> String {
-    let reader = BufReader::new(file);
+    let mut prev_a = MIN;
+    let mut greater_a = 0;
     let mut a = MIN;
     let mut b = MIN;
     let mut prev_sum = MIN;
-    let mut greater = 0;
+    let mut greater_b = 0;
     for (idx, line) in reader.lines().map(|l| l.unwrap()).enumerate() {
         let curr = line.parse::<i32>().unwrap();
+        if prev_a != MIN && curr > prev_a {
+            greater_a += 1;
+        }
+        prev_a = curr;
         if idx == 0 {
             a = curr;
             continue;
@@ -40,16 +30,12 @@ pub fn part2(file: &fs::File) -> String {
         } else {
             let curr_sum = a + b + curr;
             if curr_sum > prev_sum {
-                greater += 1;
+                greater_b += 1;
             }
             prev_sum = curr_sum;
         }
         a = b;
         b = curr;
     }
-    greater.to_string()
-}
-
-pub fn solution() -> Solution {
-    Solution { part1: Some(part1), part2: Some(part2) }
+    (greater_a.to_string(), greater_b.to_string())
 }

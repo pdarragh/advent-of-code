@@ -1,5 +1,3 @@
-use crate::solution::Solution;
-
 use std::fs;
 use std::io::BufReader;
 use std::io::prelude::*;
@@ -39,14 +37,6 @@ impl Position {
     }
 }
 
-pub fn part1(file: &fs::File) -> String {
-    let mut pos = Position { horizontal: 0, depth: 0 };
-    commands_from_file(file)
-        .iter()
-        .for_each(|c| pos.eval_command(c));
-    return (pos.horizontal * pos.depth).to_string();
-}
-
 struct Aim {
     pos: Position,
     aim: i32,
@@ -63,15 +53,14 @@ impl Aim {
     }
 }
 
-pub fn part2(file: &fs::File) -> String {
-    let pos = Position { horizontal: 0, depth: 0 };
-    let mut aim = Aim { pos, aim: 0 };
-    commands_from_file(file)
-        .iter()
-        .for_each(|c| aim.eval_command(c));
-    return (aim.pos.horizontal * aim.pos.depth).to_string();
-}
-
-pub fn solution() -> Solution {
-    Solution { part1: Some(part1), part2: Some(part2) }
+pub fn solution(file: &fs::File) -> (String, String) {
+    let mut pos = Position { horizontal: 0, depth: 0 };
+    let aim_pos = Position { horizontal: 0, depth: 0 };
+    let mut aim = Aim { pos: aim_pos, aim: 0 };
+    for command in commands_from_file(file).iter() {
+        pos.eval_command(command);
+        aim.eval_command(command);
+    }
+    ((pos.horizontal * pos.depth).to_string(),
+     (aim.pos.horizontal * aim.pos.depth).to_string())
 }
