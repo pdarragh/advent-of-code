@@ -1,3 +1,4 @@
+use core::cmp::Ordering;
 use std::fmt;
 use std::fs;
 use std::io::BufReader;
@@ -35,28 +36,33 @@ impl Coord {
             Direction::E => { Coord { x: self.x + 1, y: self.y } }
             Direction::S => { Coord { x: self.x, y: self.y + 1 } }
             Direction::W => { Coord { x: self.x - 1, y: self.y } }
+            Direction::NE => { Coord { x: self.x + 1, y: self.y - 1 } }
+            Direction::SE => { Coord { x: self.x + 1, y: self.y + 1 } }
+            Direction::SW => { Coord { x: self.x - 1, y: self.y + 1 } }
+            Direction::NW => { Coord { x: self.x - 1, y: self.y - 1 } }
         }
     }
 
     fn compare(&self, other: &Coord) -> Option<Direction> {
         // Grid has (0, 0) in top-left, so x increases left-to-right and y
         // increases top-to-bottom.
-        if self.x > other.x && self.y == other.y {
-            Some(Direction::E)
-        } else if self.x < other.x && self.y == other.y {
-            Some(Direction::W)
-        } else if self.y > other.y && self.x == other.x {
-            Some(Direction::S)
-        } else if self.y < other.y && self.x == other.x {
-            Some(Direction::N)
-        } else {
-            None
+        match (self.x.cmp(&other.x), self.y.cmp(&other.y)) {
+            (Ordering::Less, Ordering::Less) => { Some(Direction::NW) }
+            (Ordering::Less, Ordering::Equal) => { Some(Direction::W) }
+            (Ordering::Less, Ordering::Greater) => { Some(Direction::SW) }
+            (Ordering::Equal, Ordering::Less) => { Some(Direction::N) }
+            (Ordering::Equal, Ordering::Equal) => { None }
+            (Ordering::Equal, Ordering::Greater) => { Some(Direction::S) }
+            (Ordering::Greater, Ordering::Less) => { Some(Direction::NE) }
+            (Ordering::Greater, Ordering::Equal) => { Some(Direction::E) }
+            (Ordering::Greater, Ordering::Greater) => { Some(Direction::SE) }
         }
     }
 }
 
-#[derive(Eq, PartialEq, Copy, Clone)]
-enum Direction { N, S, E, W }
+#[derive(Eq, PartialEq, Copy, Clone, Debug)]
+enum Direction { N, S, E, W,
+                 NE, SE, SW, NW }
 
 #[derive(Debug)]
 struct SegmentParseError { input: String }
@@ -67,54 +73,37 @@ impl fmt::Display for SegmentParseError {
     }
 }
 
-#[derive(Debug)]
-struct SegmentDirectionError { start: Coord, end: Coord }
-
-impl fmt::Display for SegmentDirectionError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Could not identify direction for segment with start {} and end {}.",
-               self.start, self.end)
-    }
-}
-
 #[derive(Eq, PartialEq, Clone, Debug)]
-struct Segment { start: Coord, end: Coord }
+struct Segment { start: Coord, end: Coord, direction: Direction }
 
 impl Segment {
     fn from_string(s: &str) -> Result<Segment, SegmentParseError> {
         match s.split(" -> ").collect::<Vec<&str>>()[..] {
-            [c1, c2] => { Ok(Segment { start: Coord::from_string(c1),
-                                       end:   Coord::from_string(c2) }) }
+            [c1, c2] => {
+                let c1 = Coord::from_string(c1);
+                let c2 = Coord::from_string(c2);
+                if let Some(d) = c2.compare(&c1) {
+                    Ok(Segment { start: c1,
+                                 end: c2,
+                                 direction: d } )
+                } else {
+                    Err(SegmentParseError { input: s.to_string() } )
+                }
+            }
             _ => { Err(SegmentParseError { input: s.to_string() } ) }
         }
     }
 
-    fn direction(&self) -> Result<Direction, SegmentDirectionError> {
-        match self.end.compare(&self.start) {
-            Some(d) => { Ok(d) }
-            None => { Err(SegmentDirectionError { start: self.start.clone(),
-                                                  end: self.end.clone() } ) }
+    fn is_horizontal_or_vertical(&self) -> bool {
+        match self.direction {
+            Direction::N | Direction::E | Direction::S | Direction::W => { true }
+            _ => { false }
         }
     }
 
-    // fn contains(&self, coord: &Coord) -> bool {
-    //     match self.direction() {
-    //         Direction::N => { coord.y >= self.end.y && coord.y <= self.start.y }
-    //         Direction::E => { coord.x >= self.start.x && coord.x <= self.end.x }
-    //         Direction::S => { coord.y >= self.start.y && coord.y <= self.end.y }
-    //         Direction::W => { coord.x >= self.end.x && coord.x <= self.start.x }
-    //     }
-    // }
-
-    fn extreme(&self) -> Result<Coord, SegmentDirectionError> {
-        self.direction()
-            .and_then(|d|
-                      match d {
-                          Direction::N => { Ok(self.start.clone()) }
-                          Direction::E => { Ok(self.end.clone()) }
-                          Direction::S => { Ok(self.end.clone()) }
-                          Direction::W => { Ok(self.start.clone()) }
-                      } )
+    fn extreme(&self) -> Coord {
+        Coord { x: self.start.x.max(self.end.x),
+                y: self.start.y.max(self.end.y) }
     }
 }
 
@@ -125,7 +114,7 @@ impl IntoIterator for Segment {
     fn into_iter(self) -> Self::IntoIter {
         SegmentIterator { end: self.end.clone(),
                           next: self.start.clone(),
-                          direction: self.direction().unwrap() }
+                          direction: self.direction }
     }
 }
 
@@ -152,47 +141,48 @@ pub fn solution(file: &fs::File) -> (String, String) {
     let mut extreme = Coord { x: 0, y: 0 };
     for line in reader.lines().map(|l| l.unwrap()) {
         if let Ok(segment) = Segment::from_string(&line) {
-            if let Ok(segment_extreme) = segment.extreme() {
-                extreme = Coord { x: extreme.x.max(segment_extreme.x),
-                                  y: extreme.y.max(segment_extreme.y) };
-                segments.push(segment);
-            }
+            extreme = Coord { x: extreme.x.max(segment.extreme().x),
+                              y: extreme.y.max(segment.extreme().y) };
+            segments.push(segment);
         }
     }
     let width: usize = (extreme.x + 1).try_into().unwrap();
-    let mut depth_map: Vec<Vec<i32>> =
+    let mut hv_depth_map: Vec<Vec<i32>> =
+        (0..(extreme.y + 1))
+        .map(|_| {iter::repeat(0)
+                  .take(width)
+                  .collect::<Vec<i32>>()} )
+        .collect();
+    let mut all_depth_map: Vec<Vec<i32>> =
         (0..(extreme.y + 1))
         .map(|_| {iter::repeat(0)
                   .take(width)
                   .collect::<Vec<i32>>()} )
         .collect();
     for segment in segments {
-        // println!("segment: {:?}", segment);
+        let is_horizontal_or_vertical = segment.is_horizontal_or_vertical();
         for coord in segment {
-            // println!("  {}", coord);
             let y_idx: usize = coord.y.try_into().unwrap();
             let x_idx: usize = coord.x.try_into().unwrap();
-            depth_map[y_idx][x_idx] += 1;
+            if is_horizontal_or_vertical {
+                hv_depth_map[y_idx][x_idx] += 1;
+            }
+            all_depth_map[y_idx][x_idx] += 1;
         }
     }
-    let intersections = depth_map
+    let hv_intersections = hv_depth_map
         .iter()
         .fold(0,
               |dm_acc, row|
               row.iter().fold(dm_acc,
                               |r_acc, cell|
                               {r_acc + if *cell >= 2 { 1 } else { 0 }} ));
-
-    // for row in depth_map {
-    //     for cell in row {
-    //         if cell == 0 {
-    //             print!(".");
-    //         } else {
-    //             print!("{}", cell);
-    //         }
-    //     }
-    //     print!("\n");
-    // }
-
-    (intersections.to_string(), String::from("part 2"))
+    let all_intersections = all_depth_map
+        .iter()
+        .fold(0,
+              |dm_acc, row|
+              row.iter().fold(dm_acc,
+                              |r_acc, cell|
+                              {r_acc + if *cell >= 2 { 1 } else { 0 }} ));
+    (hv_intersections.to_string(), all_intersections.to_string())
 }
