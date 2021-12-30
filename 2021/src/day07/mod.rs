@@ -12,7 +12,7 @@ pub fn solution(file: &fs::File) -> (String, String) {
         .collect();
     let min_pos = positions.iter().min().unwrap().clone();
     let max_pos = positions.iter().max().unwrap().clone();
-    let least_fuel = (min_pos..(max_pos + 1))
+    let part1_fuel = (min_pos..(max_pos + 1))
         .map(|pos|
              positions
              .iter()
@@ -20,5 +20,14 @@ pub fn solution(file: &fs::File) -> (String, String) {
              .sum::<u32>())
         .min()
         .unwrap();
-    (least_fuel.to_string(), String::from("part2"))
+    let part2_fuel = (min_pos..(max_pos + 1))
+        .map(|pos|
+             positions
+             .iter()
+             .map(|p| p.max(&pos) - p.min(&pos))
+             .map(|d| ((d * d) + d) / 2)
+             .sum::<u32>())
+        .min()
+        .unwrap();
+    (part1_fuel.to_string(), part2_fuel.to_string())
 }
