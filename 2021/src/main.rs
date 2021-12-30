@@ -4,6 +4,7 @@ mod day03;
 mod day04;
 mod day05;
 mod day06;
+mod day07;
 
 use std::env;
 use std::fs;
@@ -16,6 +17,7 @@ fn main() {
         day04::solution,
         day05::solution,
         day06::solution,
+        day07::solution,
     ];
     let args: Vec<String> = env::args().collect();
     // Must supply an argument.
